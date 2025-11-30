@@ -4,7 +4,7 @@ import { Search, MapPin, Video, Calendar, Clock, AlertCircle, ArrowLeft, Filter,
 import { MOCK_DOCTORS, MOCK_APPOINTMENTS, MOCK_VITALS } from '../constants';
 import { Doctor, Appointment, AppointmentStatus, User as UserType } from '../types';
 import { Button, Card, Badge, Modal } from '../components/UIComponents';
-import { analyzeSymptoms, AISymptomResponse } from '../services/geminiService';
+import { aiAPI } from '../services/apiClient';
 import { MedicalHistory } from './MedicalHistory';
 
 interface PatientPortalProps {
@@ -40,7 +40,7 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
   // AI State
   const [symptomInput, setSymptomInput] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [aiRecommendation, setAiRecommendation] = useState<AISymptomResponse | null>(null);
+  const [aiRecommendation, setAiRecommendation] = useState<any | null>(null);
 
   // Booking Modal State
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
@@ -139,13 +139,20 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
   const handleSymptomAnalysis = async () => {
     if (!symptomInput.trim()) return;
     setIsAnalyzing(true);
-    const result = await analyzeSymptoms(symptomInput);
-    if (result) {
-      setAiRecommendation(result);
-      setSelectedSpecialty('All Specialties'); 
-      setSearchTerm(result.specialist);
+    try {
+      const response = await aiAPI.analyzeSymptoms(symptomInput);
+      if (response.success) {
+        setAiRecommendation(response.data);
+        setSelectedSpecialty('All Specialties'); 
+        setSearchTerm(response.data.specialist);
+      } else {
+        console.error('AI analysis failed:', response.error);
+      }
+    } catch (error) {
+      console.error('Error analyzing symptoms:', error);
+    } finally {
+      setIsAnalyzing(false);
     }
-    setIsAnalyzing(false);
   };
 
   const openQueueTracker = (apt: Appointment) => {
