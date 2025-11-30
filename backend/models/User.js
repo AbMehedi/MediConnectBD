@@ -23,7 +23,8 @@ const User = sequelize.define('User', {
         allowNull: false
     },
     phone: {
-        type: DataTypes.STRING
+        type: DataTypes.STRING,
+        allowNull: false
     },
     role: {
         type: DataTypes.ENUM('PATIENT', 'DOCTOR', 'ADMIN', 'SUPER_ADMIN'),
@@ -31,6 +32,40 @@ const User = sequelize.define('User', {
     },
     image: {
         type: DataTypes.STRING
+    },
+    dateOfBirth: {
+        type: DataTypes.DATE
+    },
+    gender: {
+        type: DataTypes.ENUM('MALE', 'FEMALE', 'OTHER')
+    },
+    address: {
+        type: DataTypes.TEXT
+    },
+    bloodGroup: {
+        type: DataTypes.ENUM('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-')
+    },
+    emergencyContact: {
+        type: DataTypes.STRING
+    },
+    hospitalId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+            model: 'Hospitals',
+            key: 'id'
+        }
+    },
+    isActive: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true
+    },
+    isVerified: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
+    },
+    lastLogin: {
+        type: DataTypes.DATE
     }
 }, {
     hooks: {

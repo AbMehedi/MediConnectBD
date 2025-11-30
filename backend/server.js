@@ -26,6 +26,16 @@ app.use('/api/doctors', doctorRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/emergency', emergencyRoutes);
 
+// Health Check Route
+app.get('/api/health', (req, res) => {
+    res.json({ 
+        status: 'OK', 
+        message: 'MediConnect BD Backend API is running',
+        timestamp: new Date().toISOString(),
+        version: '2.0.0'
+    });
+});
+
 // Socket.io
 const io = new Server(server, {
     cors: { origin: "*" }
@@ -50,11 +60,26 @@ io.on('connection', (socket) => {
 // Sync Database and Start Server
 const PORT = process.env.PORT || 5000;
 
-sequelize.sync({ alter: true }).then(() => {
-    console.log('MySQL Database Synced');
+// Test database connection first
+sequelize.authenticate().then(() => {
+    console.log('MySQL Database Connected Successfully.');
+    
+    // Use force: true in development to recreate tables with new schema
+    // WARNING: This will drop existing data!
+    const syncOptions = process.env.NODE_ENV === 'production' 
+        ? { alter: false } 
+        : { force: true, alter: false };
+    
+    return sequelize.sync(syncOptions);
+}).then(() => {
+    console.log('MySQL Database Synced Successfully');
     server.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
+        console.log(`🚀 Server running on port ${PORT}`);
+        console.log(`🏥 MediConnect BD Backend API Ready`);
+        console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
     });
 }).catch(err => {
-    console.error('Failed to sync database:', err);
+    console.error('❌ Database connection/sync failed:', err.message);
+    console.error('💡 Try restarting MySQL service or check connection settings');
+    process.exit(1);
 });
