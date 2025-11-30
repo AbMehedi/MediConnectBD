@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageSquare, Send, X, Bot, User, Sparkles, AlertTriangle, Loader2, ChevronDown } from 'lucide-react';
-import { getChatResponse } from '../services/geminiService';
+import { aiAPI } from '../services/apiClient';
 import { Button } from './UIComponents';
 
 interface Message {
@@ -45,27 +45,45 @@ export const AIChatbot: React.FC = () => {
     setInputText('');
     setIsLoading(true);
 
-    // Prepare history for API
-    const history = messages.map(m => ({
-      role: m.role,
-      parts: [{ text: m.text }]
-    }));
+    try {
+      // Prepare history for API
+      const history = messages.map(m => ({
+        role: m.role,
+        content: m.text
+      }));
 
-    const responseText = await getChatResponse(history, userMsg.text);
-    
-    // Check for emergency flag from system instruction
-    const isEmergency = responseText?.includes("EMERGENCY ALERT");
-    const cleanText = responseText?.replace("EMERGENCY ALERT:", "").trim();
+      const response = await aiAPI.chat(userMsg.text, history);
+      
+      if (response.success) {
+        const responseText = response.data.message;
+        
+        // Check for emergency flag from system instruction
+        const isEmergency = responseText?.includes("EMERGENCY ALERT");
+        const cleanText = responseText?.replace("EMERGENCY ALERT:", "").trim();
 
-    const botMsg: Message = {
-      id: (Date.now() + 1).toString(),
-      role: 'model',
-      text: cleanText || "I couldn't process that. Please try again.",
-      isEmergency
-    };
+        const botMsg: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'model',
+          text: cleanText || "I received your message. How can I help you today?",
+          isEmergency
+        };
 
-    setMessages(prev => [...prev, botMsg]);
-    setIsLoading(false);
+        setMessages(prev => [...prev, botMsg]);
+      } else {
+        throw new Error(response.error || 'Failed to get AI response');
+      }
+    } catch (error) {
+      console.error('AI Chat Error:', error);
+      const errorMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'model',
+        text: "I'm experiencing some technical difficulties. Please try again, or contact emergency services if this is urgent.",
+        isEmergency: false
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

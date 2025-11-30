@@ -18,6 +18,8 @@ dist-ssr
 .env.*.local
 backend/.env
 backend/.env.local
+api-gateway/.env
+api-gateway/.env.local
 
 # Editor directories and files
 .vscode/*
