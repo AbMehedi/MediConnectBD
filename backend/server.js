@@ -1,8 +1,6 @@
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
-const http = require('http');
-const { Server } = require('socket.io');
 const { sequelize } = require('./models');
 
 // Routes
@@ -10,11 +8,11 @@ const userRoutes = require('./routes/userRoutes');
 const doctorRoutes = require('./routes/doctorRoutes');
 const appointmentRoutes = require('./routes/appointmentRoutes');
 const emergencyRoutes = require('./routes/emergencyRoutes');
+const assistantRoutes = require('./routes/assistantRoutes');
 
 dotenv.config();
 
 const app = express();
-const server = http.createServer(app);
 
 // Middleware
 app.use(cors());
@@ -25,61 +23,47 @@ app.use('/api/users', userRoutes);
 app.use('/api/doctors', doctorRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/emergency', emergencyRoutes);
+app.use('/api/assistants', assistantRoutes);
 
 // Health Check Route
 app.get('/api/health', (req, res) => {
     res.json({ 
         status: 'OK', 
-        message: 'MediConnect BD Backend API is running',
+        message: 'MediConnect BD Backend API (Stable)',
         timestamp: new Date().toISOString(),
-        version: '2.0.0'
+        version: '3.0.0'
     });
 });
 
-// Socket.io
-const io = new Server(server, {
-    cors: { origin: "*" }
-});
-
-io.on('connection', (socket) => {
-    console.log('Client Connected:', socket.id);
-
-    socket.on('join_queue', (doctorId) => {
-        socket.join(`queue_${doctorId}`);
-    });
-
-    socket.on('update_queue', (data) => {
-        io.to(`queue_${data.doctorId}`).emit('queue_updated', data);
-    });
-
-    socket.on('disconnect', () => {
-        console.log('Client Disconnected');
+// Test assistant endpoints
+app.get('/api/test/assistant', (req, res) => {
+    res.json({ 
+        status: 'OK', 
+        message: 'Assistant endpoints ready',
+        endpoints: {
+            'register': 'POST /api/assistants/register',
+            'get_assistants': 'GET /api/assistants/doctor/:doctorId',
+            'update_permissions': 'PUT /api/assistants/:assistantId',
+            'test_data': 'POST /api/assistants/test-data'
+        }
     });
 });
 
-// Sync Database and Start Server
-const PORT = process.env.PORT || 5000;
+const PORT = 4000; // Forcing a known stable port
 
-// Test database connection first
-sequelize.authenticate().then(() => {
-    console.log('MySQL Database Connected Successfully.');
-    
-    // Use force: true in development to recreate tables with new schema
-    // WARNING: This will drop existing data!
-    const syncOptions = process.env.NODE_ENV === 'production' 
-        ? { alter: false } 
-        : { force: true, alter: false };
-    
-    return sequelize.sync(syncOptions);
-}).then(() => {
-    console.log('MySQL Database Synced Successfully');
-    server.listen(PORT, () => {
-        console.log(`🚀 Server running on port ${PORT}`);
-        console.log(`🏥 MediConnect BD Backend API Ready`);
-        console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+// Database connection and server start
+sequelize.authenticate()
+    .then(() => {
+        console.log('✅ Database connected');
+        
+        app.listen(PORT, '0.0.0.0', () => {
+            console.log(`🚀 Stable server running on http://localhost:${PORT}`);
+            console.log(`🔗 Health: http://localhost:${PORT}/api/health`);
+            console.log(`🧪 Assistant Test: http://localhost:${PORT}/api/test/assistant`);
+            console.log(`📋 Running pure Express - Socket.IO can be added later.`);
+        });
+    })
+    .catch(err => {
+        console.error('❌ Database error:', err.message);
+        process.exit(1);
     });
-}).catch(err => {
-    console.error('❌ Database connection/sync failed:', err.message);
-    console.error('💡 Try restarting MySQL service or check connection settings');
-    process.exit(1);
-});

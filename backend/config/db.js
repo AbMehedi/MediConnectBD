@@ -1,26 +1,15 @@
 const { Sequelize } = require('sequelize');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
-const sequelize = new Sequelize(
-    process.env.DB_NAME || 'mediconnect', 
-    process.env.DB_USER || 'root', 
-    process.env.DB_PASS || '', 
-    {
-        host: process.env.DB_HOST || 'localhost',
-        dialect: 'mysql',
-        logging: false
-    }
-);
+const env = process.env.NODE_ENV || 'development';
+const config = require('./config.json')[env];
 
-const testConnection = async () => {
-    try {
-        await sequelize.authenticate();
-        console.log('MySQL Database Connected Successfully.');
-    } catch (error) {
-        console.error('Unable to connect to the database:', error);
-    }
-};
-
-testConnection();
+let sequelize;
+if (config.use_env_variable) {
+  sequelize = new Sequelize(process.env[config.use_env_variable], config);
+} else {
+  sequelize = new Sequelize(config.database, config.username, config.password, config);
+}
 
 module.exports = sequelize;

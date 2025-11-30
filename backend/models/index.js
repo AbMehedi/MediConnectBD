@@ -7,6 +7,7 @@ const Ambulance = require('./Ambulance');
 const Diagnostic = require('./Diagnostic');
 const Emergency = require('./Emergency');
 const Queue = require('./Queue');
+const DoctorAssistant = require('./DoctorAssistant');
 
 // Define Relationships
 
@@ -74,6 +75,13 @@ Queue.belongsTo(Appointment, { foreignKey: 'appointmentId', as: 'appointment' })
 Hospital.hasMany(Ambulance, { foreignKey: 'hospitalId', as: 'ambulances' });
 Ambulance.belongsTo(Hospital, { foreignKey: 'hospitalId', as: 'hospital' });
 
+// DoctorAssistant Relationships
+User.hasMany(DoctorAssistant, { foreignKey: 'userId', as: 'assistantProfile' });
+DoctorAssistant.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+
+Doctor.hasMany(DoctorAssistant, { foreignKey: 'doctorId', as: 'assistants' });
+DoctorAssistant.belongsTo(Doctor, { foreignKey: 'doctorId', as: 'doctor' });
+
 module.exports = {
     sequelize,
     User,
@@ -83,5 +91,6 @@ module.exports = {
     Ambulance,
     Diagnostic,
     Emergency,
-    Queue
+    Queue,
+    DoctorAssistant
 };
