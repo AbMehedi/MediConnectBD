@@ -26,9 +26,14 @@ const User = sequelize.define('User', {
         type: DataTypes.STRING,
         allowNull: false
     },
-    role: {
-        type: DataTypes.ENUM('PATIENT', 'DOCTOR', 'ADMIN', 'SUPER_ADMIN'),
-        defaultValue: 'PATIENT'
+    roleId: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: {
+            model: 'Roles',
+            key: 'id'
+        },
+        defaultValue: 6 // Default to PATIENT role
     },
     image: {
         type: DataTypes.STRING

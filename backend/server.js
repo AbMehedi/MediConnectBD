@@ -58,28 +58,70 @@ io.on('connection', (socket) => {
 });
 
 // Sync Database and Start Server
-const PORT = process.env.PORT || 5000;
+const PORT = 5001; // Use a fixed port to avoid conflicts
 
-// Test database connection first
-sequelize.authenticate().then(() => {
-    console.log('MySQL Database Connected Successfully.');
-    
-    // Use force: true in development to recreate tables with new schema
-    // WARNING: This will drop existing data!
-    const syncOptions = process.env.NODE_ENV === 'production' 
-        ? { alter: false } 
-        : { force: true, alter: false };
-    
-    return sequelize.sync(syncOptions);
-}).then(() => {
-    console.log('MySQL Database Synced Successfully');
-    server.listen(PORT, () => {
-        console.log(`🚀 Server running on port ${PORT}`);
-        console.log(`🏥 MediConnect BD Backend API Ready`);
-        console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-    });
-}).catch(err => {
-    console.error('❌ Database connection/sync failed:', err.message);
-    console.error('💡 Try restarting MySQL service or check connection settings');
-    process.exit(1);
+// Function to start the server
+const startServer = () => {
+    // Test database connection first
+    sequelize.authenticate()
+        .then(() => {
+            console.log('✅ Database connection successful. Schema is managed by migrations.');
+            
+            // Start the server
+            return new Promise((resolve, reject) => {
+                const httpServer = server.listen(PORT, '0.0.0.0', () => {
+                    console.log(`\n🚀 Server running on port ${PORT}`);
+                    console.log(`🏥 MediConnect BD Backend API Ready`);
+                    console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}\n`);
+                    resolve(httpServer);
+                }).on('error', (err) => {
+                    if (err.code === 'EADDRINUSE') {
+                        console.error(`❌ Port ${PORT} is already in use.`);
+                        console.log('💡 Trying to find and close the process...');
+                        // Try to find and kill the process using the port
+                        const { exec } = require('child_process');
+                        exec(`netstat -ano | findstr :${PORT}`, (error, stdout) => {
+                            if (stdout) {
+                                const processId = stdout.trim().split(/\s+/).pop();
+                                if (processId) {
+                                    console.log(`🛑 Killing process with PID: ${processId}`);
+                                    exec(`taskkill /F /PID ${processId}`, () => {
+                                        console.log('✅ Process terminated. Please restart the server.');
+                                    });
+                                }
+                            }
+                        });
+                    }
+                    reject(err);
+                });
+            });
+        })
+        .catch(err => {
+            console.error('❌ Error during database connection/sync:', err.message);
+            if (err.original) {
+                console.error('💡 Database error details:', err.original);
+            }
+            console.log('\n🔧 Troubleshooting steps:');
+            console.log('1. Make sure MySQL server is running');
+            console.log('2. Check your database credentials in config/config.json');
+            console.log('3. Try running: npx sequelize-cli db:drop && npx sequelize-cli db:create && npx sequelize-cli db:migrate\n');
+            process.exit(1);
+        });
+};
+
+// Start the server
+startServer();
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err) => {
+    console.error('Unhandled Rejection:', err);
+    // Close server & exit process
+    server.close(() => process.exit(1));
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+    // Close server & exit process
+    server.close(() => process.exit(1));
 });
