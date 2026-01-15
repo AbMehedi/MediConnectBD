@@ -12,15 +12,23 @@ const db = mysql.createPool({
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASS || '',
     database: process.env.DB_NAME || 'mediconnect',
-    port: process.env.DB_PORT || 3306,
+    port: parseInt(process.env.DB_PORT) || 3306,
     waitForConnections: true,
     connectionLimit: 10,
-    queueLimit: 0
+    queueLimit: 0,
+    charset: 'utf8mb4',
+    ssl: false,
+    multipleStatements: false
 });
 
 // Test connection function
 const testConnection = async () => {
     try {
+        console.log('🔄 Testing database connection...');
+        console.log(`📍 Host: ${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 3306}`);
+        console.log(`🗄️ Database: ${process.env.DB_NAME || 'mediconnect'}`);
+        console.log(`👤 User: ${process.env.DB_USER || 'root'}`);
+        
         const connection = await db.getConnection();
         console.log('✅ MySQL Database Connected Successfully');
         
@@ -28,10 +36,19 @@ const testConnection = async () => {
         const [tables] = await connection.execute('SHOW TABLES');
         console.log(`📊 Found ${tables.length} tables in database`);
         
+        if (tables.length === 0) {
+            console.warn('⚠️ Database is empty. Run database setup scripts first.');
+        }
+        
         connection.release();
         return true;
     } catch (error) {
         console.error('❌ Database connection failed:', error.message);
+        console.error('💡 Troubleshooting:');
+        console.error('   - Make sure MySQL/XAMPP is running');
+        console.error('   - Verify database credentials in .env file');
+        console.error('   - Check if database "mediconnect" exists');
+        console.error('   - Ensure no firewall is blocking the connection');
         return false;
     }
 };
