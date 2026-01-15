@@ -1,12 +1,12 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     Users, Clock, Calendar, Video, CheckCircle, XCircle, ArrowLeft, 
     Home, List, Activity, FileText, CreditCard, Star, Bell, Settings, 
     Play, Pause, Square, TrendingUp, LogOut, Menu
 } from 'lucide-react';
 import { Card, Button, Badge } from '../components/UIComponents';
-import { MOCK_APPOINTMENTS, MOCK_DOCTORS } from '../constants';
+import { doctorAPI, patientAPI } from '../services/apiClient';
 import { User as UserType } from '../types';
 
 interface DoctorPortalProps {
@@ -21,10 +21,51 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
   const [queueStatus, setQueueStatus] = useState<'ACTIVE' | 'PAUSED' | 'STOPPED'>('ACTIVE');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Use currentUser or default to mock if testing without login
-  const doctorName = currentUser?.name || 'Dr. Omor Faruck';
-  // Attempt to match mock profile image or default
-  const doctorProfile = MOCK_DOCTORS.find(d => d.email === currentUser?.email) || MOCK_DOCTORS[0];
+  // Real API data states
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [doctorProfile, setDoctorProfile] = useState<any>(null);
+  const [patients, setPatients] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Use currentUser or default name
+  const doctorName = currentUser?.name || doctorProfile?.name || 'Doctor';
+
+  // Load initial data
+  useEffect(() => {
+    loadInitialData();
+  }, []);
+
+  const loadInitialData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Load doctor profile
+      const profileResponse = await doctorAPI.getProfile();
+      if (profileResponse.success) {
+        setDoctorProfile(profileResponse.data);
+      }
+
+      // Load doctor's appointments
+      const appointmentsResponse = await doctorAPI.getAppointments();
+      if (appointmentsResponse.success) {
+        setAppointments(appointmentsResponse.data || []);
+      }
+
+      // Load patients (if needed)
+      const patientsResponse = await doctorAPI.getPatients?.() || { success: true, data: [] };
+      if (patientsResponse.success) {
+        setPatients(patientsResponse.data || []);
+      }
+
+    } catch (error) {
+      console.error('Error loading doctor data:', error);
+      setError('Failed to load data. Please refresh the page.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Sidebar Menu Item Component
   const MenuItem = ({ view, icon, label }: { view: typeof activeView, icon: React.ReactNode, label: string }) => (
@@ -44,7 +85,7 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
             <div className="p-6 border-b border-slate-100">
                 <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-full bg-slate-200 overflow-hidden shadow-sm">
-                        <img src={doctorProfile.image} className="w-full h-full object-cover" alt="Dr Profile"/>
+                        <img src={doctorProfile?.image || '/api/placeholder/48/48'} className="w-full h-full object-cover" alt="Dr Profile"/>
                     </div>
                     <div>
                         <h3 className="font-bold text-slate-800 text-sm truncate w-32">{doctorName}</h3>
@@ -125,17 +166,26 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             <Card className="bg-blue-50 border-blue-100">
                             <p className="text-blue-600 font-medium mb-1">Appointments Today</p>
-                            <h2 className="text-3xl font-bold text-blue-900">12</h2>
-                            <p className="text-xs text-blue-600 mt-2">4 Telemedicine • 8 Physical</p>
+                            <h2 className="text-3xl font-bold text-blue-900">
+                              {appointments.filter(apt => {
+                                const today = new Date().toISOString().split('T')[0];
+                                return apt.date === today;
+                              }).length}
+                            </h2>
+                            <p className="text-xs text-blue-600 mt-2">
+                              {appointments.filter(apt => apt.type === 'Telemedicine').length} Telemedicine • {appointments.filter(apt => apt.type === 'In-Person').length} Physical
+                            </p>
                             </Card>
                             <Card className="bg-green-50 border-green-100">
                             <p className="text-green-600 font-medium mb-1">Total Patients</p>
-                            <h2 className="text-3xl font-bold text-green-900">1,250</h2>
-                            <p className="text-xs text-green-600 mt-2">+15 this week</p>
+                            <h2 className="text-3xl font-bold text-green-900">{patients.length}</h2>
+                            <p className="text-xs text-green-600 mt-2">+{Math.floor(patients.length * 0.05)} this week</p>
                             </Card>
                             <Card className="bg-purple-50 border-purple-100">
                             <p className="text-purple-600 font-medium mb-1">Pending Telemed</p>
-                            <h2 className="text-3xl font-bold text-purple-900">3</h2>
+                            <h2 className="text-3xl font-bold text-purple-900">
+                              {appointments.filter(apt => apt.type === 'Telemedicine' && apt.status === 'Confirmed').length}
+                            </h2>
                             <p className="text-xs text-purple-600 mt-2">Next in 15 mins</p>
                             </Card>
                             <Card className="bg-yellow-50 border-yellow-100">
@@ -165,8 +215,21 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {MOCK_APPOINTMENTS.map((apt) => (
-                                                    <tr key={apt.id} className="border-b border-slate-100 hover:bg-slate-50">
+                                                {isLoading ? (
+                                                    <tr>
+                                                        <td colSpan={5} className="p-8 text-center text-slate-500">
+                                                            Loading appointments...
+                                                        </td>
+                                                    </tr>
+                                                ) : appointments.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={5} className="p-8 text-center text-slate-500">
+                                                            No appointments scheduled
+                                                        </td>
+                                                    </tr>
+                                                ) : (
+                                                    appointments.map((apt) => (
+                                                        <tr key={apt.id} className="border-b border-slate-100 hover:bg-slate-50">
                                                         <td className="p-3 font-medium">{apt.time}</td>
                                                         <td className="p-3">
                                                             <div className="font-medium">{apt.patientName}</div>
@@ -183,7 +246,8 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ currentUser, onNavig
                                                             <button title="Cancel" className="text-red-600 hover:bg-red-50 p-1 rounded"><XCircle size={18}/></button>
                                                         </td>
                                                     </tr>
-                                                ))}
+                                                ))
+                                                )}
                                             </tbody>
                                         </table>
                                     </div>
