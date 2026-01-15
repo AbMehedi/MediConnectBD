@@ -87,32 +87,17 @@ router.get('/patient/:patientId', async (req, res) => {
         const query = `
             SELECT 
                 a.id,
-                a.appointmentDate,
-                a.appointmentTime,
+                a.appointmentDate as date,
+                a.appointmentTime as time,
                 a.type,
                 a.status,
                 a.symptoms,
-                a.diagnosis,
-                a.prescription,
                 a.consultationFee,
-                a.paymentStatus,
                 u.name as doctorName,
-                d.specialization,
-                d.roomNumber,
-                h.name as hospitalName,
-                h.address as hospitalAddress,
-                h.contact as hospitalPhone,
-                DATE_FORMAT(a.appointmentDate, '%d %M %Y') as formattedDate,
-                TIME_FORMAT(a.appointmentTime, '%h:%i %p') as formattedTime,
-                CASE 
-                    WHEN a.appointmentDate = CURDATE() THEN 'Today'
-                    WHEN a.appointmentDate = CURDATE() + INTERVAL 1 DAY THEN 'Tomorrow'
-                    ELSE DATE_FORMAT(a.appointmentDate, '%d %b %Y')
-                END as dateLabel
+                doc.specialization
             FROM appointments a
             JOIN doctors doc ON a.doctorId = doc.id
             JOIN users u ON doc.userId = u.id
-            JOIN hospitals h ON a.hospitalId = h.id
             ${whereClause}
             ORDER BY a.appointmentDate DESC, a.appointmentTime DESC
             LIMIT ?

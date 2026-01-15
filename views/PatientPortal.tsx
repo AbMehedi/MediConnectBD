@@ -198,14 +198,13 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
   const handleConfirmBooking = async () => {
     try {
       const appointmentData = {
+        patientId: patientProfile?.id || 10, // TODO: Get from auth context
         doctorId: bookingDoctor!.id,
-        doctorName: bookingDoctor!.name,
-        date: selectedDate,
-        time: selectedTime,
-        type: bookingType,
-        specialization: bookingDoctor!.specialization,
-        hospital: bookingDoctor!.hospital,
-        fees: bookingType === 'In-Person' ? bookingDoctor!.fees?.physical : bookingDoctor!.fees?.online
+        hospitalId: bookingDoctor!.hospitalId || 1, // TODO: Get from doctor data
+        appointmentDate: selectedDate,
+        appointmentTime: selectedTime,
+        type: bookingType === 'In-Person' ? 'Consultation' : 'Consultation',
+        symptoms: `Appointment booked via ${bookingType}`
       };
 
       const response = await patientAPI.bookAppointment(appointmentData);

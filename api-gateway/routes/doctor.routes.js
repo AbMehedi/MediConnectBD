@@ -34,7 +34,7 @@ router.get('/:id',
  */
 router.get('/profile/me',
   authenticateToken,
-  requireRole('doctor'),
+  requireRole('DOCTOR'),
   async (req, res) => {
     await proxyToBackend(req, res, '/api/doctors/profile');
   }
@@ -46,7 +46,7 @@ router.get('/profile/me',
  */
 router.put('/profile',
   authenticateToken,
-  requireRole('doctor'),
+  requireRole('DOCTOR'),
   async (req, res) => {
     clearCache('/api/doctors');
     await proxyToBackend(req, res, '/api/doctors/profile');
@@ -59,7 +59,7 @@ router.put('/profile',
  */
 router.get('/appointments/list',
   authenticateToken,
-  requireRole('doctor'),
+  requireRole('DOCTOR'),
   async (req, res) => {
     await proxyToBackend(req, res, '/api/doctors/appointments');
   }
@@ -71,7 +71,7 @@ router.get('/appointments/list',
  */
 router.patch('/appointments/:id',
   authenticateToken,
-  requireRole('doctor'),
+  requireRole('DOCTOR'),
   async (req, res) => {
     await proxyToBackend(req, res, `/api/doctors/appointments/${req.params.id}`);
   }
@@ -83,7 +83,7 @@ router.patch('/appointments/:id',
  */
 router.get('/patients/list',
   authenticateToken,
-  requireRole('doctor'),
+  requireRole('DOCTOR'),
   async (req, res) => {
     await proxyToBackend(req, res, '/api/doctors/patients');
   }
@@ -95,7 +95,7 @@ router.get('/patients/list',
  */
 router.post('/prescriptions',
   authenticateToken,
-  requireRole('doctor'),
+  requireRole('DOCTOR'),
   async (req, res) => {
     await proxyToBackend(req, res, '/api/doctors/prescriptions');
   }

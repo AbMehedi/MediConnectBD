@@ -10,7 +10,7 @@ const { proxyToBackend } = require('../utils/proxy');
  */
 router.get('/profile',
   authenticateToken,
-  requireRole('patient'),
+  requireRole('PATIENT'),
   cacheMiddleware(120),
   async (req, res) => {
     await proxyToBackend(req, res, '/api/users/profile');
@@ -23,7 +23,7 @@ router.get('/profile',
  */
 router.put('/profile',
   authenticateToken,
-  requireRole('patient'),
+  requireRole('PATIENT'),
   async (req, res) => {
     clearCache('/api/patients/profile');
     await proxyToBackend(req, res, '/api/users/profile');
@@ -36,9 +36,9 @@ router.put('/profile',
  */
 router.get('/appointments',
   authenticateToken,
-  requireRole('patient'),
+  requireRole('PATIENT'),
   async (req, res) => {
-    await proxyToBackend(req, res, '/api/appointments');
+    await proxyToBackend(req, res, `/api/appointments/patient/${req.user.userId}`);
   }
 );
 
@@ -48,9 +48,9 @@ router.get('/appointments',
  */
 router.post('/appointments',
   authenticateToken,
-  requireRole('patient'),
+  requireRole('PATIENT'),
   async (req, res) => {
-    await proxyToBackend(req, res, '/api/appointments');
+    await proxyToBackend(req, res, '/api/appointments/book');
   }
 );
 
