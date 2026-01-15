@@ -13,14 +13,32 @@ const { proxyToBackend } = require('../utils/proxy');
 router.post('/register',
   authLimiter,
   [
-    body('username').trim().isLength({ min: 3 }).withMessage('Username must be at least 3 characters'),
+    body('name').trim().isLength({ min: 3 }).withMessage('Name must be at least 3 characters'),
     body('email').isEmail().withMessage('Valid email required'),
     body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-    body('role').isIn(['patient', 'doctor', 'hospital', 'admin']).withMessage('Invalid role')
+    body('phone').trim().isLength({ min: 10 }).withMessage('Phone number must be at least 10 characters'),
+    body('gender').optional().isIn(['MALE', 'FEMALE']).withMessage('Gender must be MALE or FEMALE'),
+    body('role').optional().isIn(['PATIENT', 'DOCTOR', 'ADMIN']).withMessage('Invalid role')
   ],
   validate,
   async (req, res) => {
-    await proxyToBackend(req, res, '/api/users/register');
+    await proxyToBackend(req, res, '/api/auth/register');
+  }
+);
+
+/**
+ * User Login (Simple)
+ * POST /api/auth/login
+ */
+router.post('/login',
+  authLimiter,
+  [
+    body('email').isEmail().withMessage('Valid email required'),
+    body('password').notEmpty().withMessage('Password required')
+  ],
+  validate,
+  async (req, res) => {
+    await proxyToBackend(req, res, '/api/auth/login');
   }
 );
 
@@ -36,7 +54,7 @@ router.post('/web/login',
   ],
   validate,
   async (req, res) => {
-    await proxyToBackend(req, res, '/api/users/login');
+    await proxyToBackend(req, res, '/api/auth/login');
   }
 );
 

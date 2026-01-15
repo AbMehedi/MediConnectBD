@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
-const { User } = require('../models');
+const bcrypt = require('bcryptjs');
+const { selectQuery, insertQuery, updateQuery } = require('../config/database');
 
 const generateToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET || 'secret123', { expiresIn: '30d' });
@@ -17,75 +18,111 @@ const registerUser = async (req, res) => {
         dateOfBirth, 
         gender, 
         address, 
-        bloodGroup, 
-        emergencyContact, 
-        hospitalId 
+        bloodGroup,
+        emergencyContact,
+        bio
     } = req.body;
 
     try {
+        // Validate required fields
+        if (!name || !email || !password || !phone) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Please provide all required fields' 
+            });
+        }
+
         // Check if user already exists
-        const userExists = await User.findOne({ where: { email } });
-        if (userExists) {
-            return res.status(400).json({ message: 'User already exists' });
+        const existingUser = await selectQuery(
+            'SELECT id FROM users WHERE email = ? OR phone = ?',
+            [email, phone]
+        );
+        
+        if (existingUser.length > 0) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'User with this email or phone already exists' 
+            });
         }
 
-        // Check for duplicate phone
-        const phoneExists = await User.findOne({ where: { phone } });
-        if (phoneExists) {
-            return res.status(400).json({ message: 'Phone number already registered' });
-        }
+        // Hash password
+        const saltRounds = 10;
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-        // Validate role-specific requirements
-        if (role === 'DOCTOR' || role === 'ADMIN') {
-            if (!hospitalId) {
-                return res.status(400).json({ message: 'Hospital ID is required for doctors and admins' });
+        // Insert new user with explicit column mapping
+        const insertResult = await insertQuery(
+            `INSERT INTO users 
+             (name, email, password, phone, role, dateOfBirth, gender, address, bloodGroup, emergencyContact, bio, isActive, isVerified, createdAt, updatedAt) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, NOW(), NOW())`,
+            [
+                name, 
+                email, 
+                hashedPassword, 
+                phone, 
+                role || 'PATIENT', 
+                dateOfBirth, 
+                gender, 
+                address, 
+                bloodGroup, 
+                emergencyContact, 
+                bio
+            ]
+        );
+
+        if (insertResult.insertId) {
+            // Retrieve the created user with all fields
+            const users = await selectQuery(
+                `SELECT id, name, email, phone, role, dateOfBirth, gender, address, bloodGroup, 
+                        emergencyContact, profilePicture, bio, isActive, isVerified, createdAt 
+                 FROM users WHERE id = ?`,
+                [insertResult.insertId]
+            );
+
+            if (users.length === 0) {
+                return res.status(500).json({
+                    success: false,
+                    message: 'User created but profile could not be retrieved'
+                });
             }
-        }
 
-        // Create user with comprehensive data
-        const userData = {
-            name,
-            email,
-            password,
-            phone,
-            role: role || 'PATIENT',
-            dateOfBirth,
-            gender,
-            address,
-            bloodGroup,
-            emergencyContact,
-            hospitalId,
-            isActive: true,
-            isVerified: false,
-            lastLogin: new Date()
-        };
-
-        const user = await User.create(userData);
-
-        if (user) {
+            const newUser = users[0];
+            
+            // Return complete user profile data
             res.status(201).json({
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                phone: user.phone,
-                role: user.role,
-                dateOfBirth: user.dateOfBirth,
-                gender: user.gender,
-                address: user.address,
-                bloodGroup: user.bloodGroup,
-                emergencyContact: user.emergencyContact,
-                hospitalId: user.hospitalId,
-                isActive: user.isActive,
-                isVerified: user.isVerified,
-                token: generateToken(user.id),
-                message: 'User registered successfully. Please verify your account.'
+                success: true,
+                message: 'User registered successfully',
+                user: {
+                    id: newUser.id,
+                    name: newUser.name,
+                    email: newUser.email,
+                    phone: newUser.phone,
+                    role: newUser.role,
+                    dateOfBirth: newUser.dateOfBirth,
+                    gender: newUser.gender,
+                    address: newUser.address,
+                    bloodGroup: newUser.bloodGroup,
+                    emergencyContact: newUser.emergencyContact,
+                    profilePicture: newUser.profilePicture,
+                    bio: newUser.bio,
+                    isActive: Boolean(newUser.isActive),
+                    isVerified: Boolean(newUser.isVerified),
+                    createdAt: newUser.createdAt,
+                    profileComplete: !!(newUser.address && newUser.bio)
+                },
+                token: generateToken(newUser.id)
             });
         } else {
-            res.status(400).json({ message: 'Invalid user data' });
+            res.status(400).json({ 
+                success: false,
+                message: 'Failed to create user' 
+            });
         }
     } catch (error) {
         console.error('Registration error:', error);
-        res.status(500).json({ message: error.message });
+        res.status(500).json({ 
+            success: false,
+            message: 'Server error during registration' 
+        });
     }
 };
 
@@ -95,55 +132,71 @@ const authUser = async (req, res) => {
     const { email, password } = req.body;
 
     try {
-        const user = await User.findOne({ 
-            where: { email },
-            include: [
-                {
-                    model: require('../models').Hospital,
-                    attributes: ['id', 'name', 'type', 'address']
-                }
-            ]
-        });
-
-        if (!user) {
-            return res.status(401).json({ message: 'Invalid email or password' });
+        // Validate input
+        if (!email || !password) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Please provide email and password' 
+            });
         }
+
+        // Find user by email with complete profile
+        const users = await selectQuery(
+            `SELECT id, name, email, phone, password, role, dateOfBirth, gender, address, bloodGroup, 
+                    emergencyContact, profilePicture, bio, isActive, isVerified, createdAt 
+             FROM users WHERE email = ?`,
+            [email]
+        );
+
+        if (users.length === 0) {
+            return res.status(401).json({ 
+                success: false,
+                message: 'Invalid email or password' 
+            });
+        }
+
+        const user = users[0];
 
         // Check if user is active
         if (!user.isActive) {
-            return res.status(401).json({ message: 'Account is inactive. Please contact support.' });
-        }
-
-        if (await user.matchPassword(password)) {
-            // Update last login
-            user.lastLogin = new Date();
-            await user.save();
-
-            res.json({
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                phone: user.phone,
-                role: user.role,
-                dateOfBirth: user.dateOfBirth,
-                gender: user.gender,
-                address: user.address,
-                bloodGroup: user.bloodGroup,
-                emergencyContact: user.emergencyContact,
-                hospitalId: user.hospitalId,
-                hospital: user.Hospital,
-                isActive: user.isActive,
-                isVerified: user.isVerified,
-                lastLogin: user.lastLogin,
-                token: generateToken(user.id),
-                message: 'Login successful'
+            return res.status(401).json({ 
+                success: false,
+                message: 'Account is inactive. Please contact support.' 
             });
-        } else {
-            res.status(401).json({ message: 'Invalid email or password' });
         }
+
+        // Check password
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        
+        if (!isPasswordValid) {
+            return res.status(401).json({ 
+                success: false,
+                message: 'Invalid email or password' 
+            });
+        }
+
+        // Update last login timestamp
+        await updateQuery(
+            'UPDATE users SET lastLogin = NOW(), updatedAt = NOW() WHERE id = ?',
+            [user.id]
+        );
+
+        // Return user data (exclude password)
+        const { password: _, ...userData } = user;
+        
+        res.json({
+            success: true,
+            message: 'Login successful',
+            user: userData,
+            token: generateToken(user.id)
+        });
+
     } catch (error) {
         console.error('Login error:', error);
-        res.status(500).json({ message: error.message });
+        res.status(500).json({ 
+            success: false,
+            message: 'Server error during login' 
+        });
     }
 };
 
@@ -151,24 +204,30 @@ const authUser = async (req, res) => {
 // @route   GET /api/users/profile
 const getUserProfile = async (req, res) => {
     try {
-        const user = await User.findByPk(req.user.id, {
-            attributes: { exclude: ['password'] },
-            include: [
-                {
-                    model: require('../models').Hospital,
-                    attributes: ['id', 'name', 'type', 'address', 'contact']
-                }
-            ]
-        });
+        const users = await selectQuery(
+            `SELECT id, name, email, phone, role, dateOfBirth, gender, address, bloodGroup, 
+                    emergencyContact, profilePicture, bio, isActive, isVerified, createdAt, lastLogin
+             FROM users WHERE id = ?`,
+            [req.user.id]
+        );
 
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
+        if (users.length === 0) {
+            return res.status(404).json({ 
+                success: false,
+                message: 'User not found' 
+            });
         }
 
-        res.json(user);
+        res.json({
+            success: true,
+            user: users[0]
+        });
     } catch (error) {
         console.error('Get profile error:', error);
-        res.status(500).json({ message: error.message });
+        res.status(500).json({ 
+            success: false,
+            message: 'Server error retrieving profile' 
+        });
     }
 };
 
@@ -183,181 +242,85 @@ const updateUserProfile = async (req, res) => {
             gender,
             address,
             bloodGroup,
-            emergencyContact
+            emergencyContact,
+            bio,
+            profilePicture
         } = req.body;
 
-        const user = await User.findByPk(req.user.id);
+        // Check if user exists
+        const users = await selectQuery(
+            'SELECT id, phone FROM users WHERE id = ?',
+            [req.user.id]
+        );
 
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
+        if (users.length === 0) {
+            return res.status(404).json({ 
+                success: false,
+                message: 'User not found' 
+            });
         }
+
+        const user = users[0];
 
         // Check if phone is being changed and if it's already taken
         if (phone && phone !== user.phone) {
-            const phoneExists = await User.findOne({ where: { phone } });
-            if (phoneExists) {
-                return res.status(400).json({ message: 'Phone number already registered' });
+            const phoneCheck = await selectQuery(
+                'SELECT id FROM users WHERE phone = ? AND id != ?',
+                [phone, req.user.id]
+            );
+            
+            if (phoneCheck.length > 0) {
+                return res.status(400).json({ 
+                    success: false,
+                    message: 'Phone number already registered' 
+                });
             }
         }
 
-        // Update user data
-        const updatedUser = await user.update({
-            name: name || user.name,
-            phone: phone || user.phone,
-            dateOfBirth: dateOfBirth || user.dateOfBirth,
-            gender: gender || user.gender,
-            address: address || user.address,
-            bloodGroup: bloodGroup || user.bloodGroup,
-            emergencyContact: emergencyContact || user.emergencyContact
-        });
+        // Update user profile
+        const updateResult = await updateQuery(
+            `UPDATE users SET 
+                name = COALESCE(?, name),
+                phone = COALESCE(?, phone),
+                dateOfBirth = COALESCE(?, dateOfBirth),
+                gender = COALESCE(?, gender),
+                address = COALESCE(?, address),
+                bloodGroup = COALESCE(?, bloodGroup),
+                emergencyContact = COALESCE(?, emergencyContact),
+                bio = COALESCE(?, bio),
+                profilePicture = COALESCE(?, profilePicture),
+                updatedAt = NOW()
+             WHERE id = ?`,
+            [name, phone, dateOfBirth, gender, address, bloodGroup, emergencyContact, bio, profilePicture, req.user.id]
+        );
+
+        if (updateResult.affectedRows === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No changes made to profile'
+            });
+        }
+
+        // Get updated user profile
+        const [updatedUser] = await selectQuery(
+            `SELECT id, name, email, phone, role, dateOfBirth, gender, address, bloodGroup, 
+                    emergencyContact, profilePicture, bio, isActive, isVerified, createdAt, updatedAt
+             FROM users WHERE id = ?`,
+            [req.user.id]
+        );
 
         res.json({
-            id: updatedUser.id,
-            name: updatedUser.name,
-            email: updatedUser.email,
-            phone: updatedUser.phone,
-            role: updatedUser.role,
-            dateOfBirth: updatedUser.dateOfBirth,
-            gender: updatedUser.gender,
-            address: updatedUser.address,
-            bloodGroup: updatedUser.bloodGroup,
-            emergencyContact: updatedUser.emergencyContact,
-            hospitalId: updatedUser.hospitalId,
-            isActive: updatedUser.isActive,
-            isVerified: updatedUser.isVerified,
-            message: 'Profile updated successfully'
+            success: true,
+            message: 'Profile updated successfully',
+            user: updatedUser
         });
+
     } catch (error) {
         console.error('Update profile error:', error);
-        res.status(500).json({ message: error.message });
-    }
-};
-
-// @desc    Verify user account
-// @route   POST /api/users/verify/:id
-const verifyUser = async (req, res) => {
-    try {
-        const user = await User.findByPk(req.params.id);
-
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        user.isVerified = true;
-        await user.save();
-
-        res.json({ message: 'User verified successfully' });
-    } catch (error) {
-        console.error('Verify user error:', error);
-        res.status(500).json({ message: error.message });
-    }
-};
-
-// @desc    Get all users (Admin only)
-// @route   GET /api/users/all
-const getAllUsers = async (req, res) => {
-    try {
-        const { page = 1, limit = 10, role, hospital, verified } = req.query;
-        
-        const whereClause = {};
-        if (role) whereClause.role = role;
-        if (hospital) whereClause.hospitalId = hospital;
-        if (verified !== undefined) whereClause.isVerified = verified === 'true';
-
-        const offset = (page - 1) * limit;
-
-        const users = await User.findAndCountAll({
-            where: whereClause,
-            attributes: { exclude: ['password'] },
-            include: [
-                {
-                    model: require('../models').Hospital,
-                    attributes: ['id', 'name', 'type']
-                }
-            ],
-            limit: parseInt(limit),
-            offset: parseInt(offset),
-            order: [['createdAt', 'DESC']]
+        res.status(500).json({ 
+            success: false,
+            message: 'Server error updating profile' 
         });
-
-        res.json({
-            users: users.rows,
-            totalUsers: users.count,
-            totalPages: Math.ceil(users.count / limit),
-            currentPage: parseInt(page)
-        });
-    } catch (error) {
-        console.error('Get all users error:', error);
-        res.status(500).json({ message: error.message });
-    }
-};
-
-// @desc    Get users by role
-// @route   GET /api/users/role/:role
-const getUsersByRole = async (req, res) => {
-    try {
-        const { role } = req.params;
-        const { hospitalId } = req.query;
-
-        const whereClause = { role, isActive: true };
-        if (hospitalId) whereClause.hospitalId = hospitalId;
-
-        const users = await User.findAll({
-            where: whereClause,
-            attributes: { exclude: ['password'] },
-            include: [
-                {
-                    model: require('../models').Hospital,
-                    attributes: ['id', 'name', 'type']
-                }
-            ],
-            order: [['name', 'ASC']]
-        });
-
-        res.json(users);
-    } catch (error) {
-        console.error('Get users by role error:', error);
-        res.status(500).json({ message: error.message });
-    }
-};
-
-// @desc    Deactivate user
-// @route   PUT /api/users/deactivate/:id
-const deactivateUser = async (req, res) => {
-    try {
-        const user = await User.findByPk(req.params.id);
-
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        user.isActive = false;
-        await user.save();
-
-        res.json({ message: 'User deactivated successfully' });
-    } catch (error) {
-        console.error('Deactivate user error:', error);
-        res.status(500).json({ message: error.message });
-    }
-};
-
-// @desc    Reactivate user
-// @route   PUT /api/users/reactivate/:id
-const reactivateUser = async (req, res) => {
-    try {
-        const user = await User.findByPk(req.params.id);
-
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        user.isActive = true;
-        await user.save();
-
-        res.json({ message: 'User reactivated successfully' });
-    } catch (error) {
-        console.error('Reactivate user error:', error);
-        res.status(500).json({ message: error.message });
     }
 };
 
@@ -365,10 +328,5 @@ module.exports = {
     registerUser, 
     authUser, 
     getUserProfile, 
-    updateUserProfile, 
-    verifyUser, 
-    getAllUsers,
-    getUsersByRole,
-    deactivateUser,
-    reactivateUser
+    updateUserProfile
 };
