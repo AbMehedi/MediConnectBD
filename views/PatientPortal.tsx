@@ -62,10 +62,10 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
   const [activeSettingsTab, setActiveSettingsTab] = useState<'PROFILE' | 'SECURITY' | 'NOTIFICATIONS' | 'PRIVACY'>('PROFILE');
   
   const [settingsForm, setSettingsForm] = useState({
-      name: currentUser?.name || 'Rahim Uddin',
-      email: currentUser?.email || 'rahim@example.com',
-      phone: '01712345678',
-      bloodGroup: MOCK_VITALS.bloodGroup,
+      name: '',
+      email: '',
+      phone: '',
+      bloodGroup: '',
       notifications: {
           email: true,
           sms: true,
@@ -77,15 +77,33 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
       }
   });
 
-  // Update form if currentUser changes (e.g. login)
+  // Load real user data from localStorage or props
   useEffect(() => {
-      if (currentUser) {
-          setSettingsForm(prev => ({
-              ...prev,
-              name: currentUser.name,
-              email: currentUser.email
-          }));
-      }
+      const loadUserData = () => {
+          // Try to get user from localStorage first
+          const storedUser = localStorage.getItem('mediconnect_user');
+          let userData = currentUser;
+          
+          if (storedUser) {
+              try {
+                  userData = JSON.parse(storedUser);
+              } catch (error) {
+                  console.error('Error parsing stored user data:', error);
+              }
+          }
+          
+          if (userData) {
+              setSettingsForm(prev => ({
+                  ...prev,
+                  name: userData.name || '',
+                  email: userData.email || '',
+                  phone: userData.phone || '',
+                  bloodGroup: userData.bloodGroup || '' // Only show if user actually has it
+              }));
+          }
+      };
+      
+      loadUserData();
   }, [currentUser]);
 
   const [isSavingSettings, setIsSavingSettings] = useState(false);

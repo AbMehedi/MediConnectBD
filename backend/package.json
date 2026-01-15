@@ -8,6 +8,10 @@
     "dev": "nodemon server.js",
     "test-db": "node test-connection.js",
     "setup-db": "node setup-database.js",
+    "populate-db": "node populate-database.js",
+    "populate-simple": "node populate-simple.js",
+    "populate-manual": "node populate-manual.js",
+    "reset-db": "node setup-database.js && node populate-manual.js",
     "migrate-db": "node migrate-database.js"
   },
   "dependencies": {

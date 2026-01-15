@@ -79,6 +79,11 @@ async function setupDatabase() {
         console.log('\n🎉 Database setup completed successfully!');
         console.log('🚀 You can now start the backend server');
         
+        // Ask if user wants to populate with sample data
+        console.log('\n💡 Next step: Populate database with sample data');
+        console.log('   Run: npm run populate-db');
+        console.log('   Or:  npm run reset-db (setup + populate)');
+        
     } catch (error) {
         console.error('❌ Database setup failed:', error.message);
         console.log('\n💡 Troubleshooting:');
