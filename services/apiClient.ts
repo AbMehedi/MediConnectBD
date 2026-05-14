@@ -137,11 +137,15 @@ const apiClient = new APIClient();
  */
 export const authAPI = {
   async register(userData) {
-    return apiClient.post('/auth/register', userData);
+    const response = await apiClient.post('/auth/register', userData);
+    if (response.success && response.token) {
+      apiClient.setToken(response.token);
+    }
+    return response;
   },
 
   async login(email, password) {
-    const response = await apiClient.post('/auth/web/login', { email, password });
+    const response = await apiClient.post('/auth/login', { email, password });
     if (response.success && response.token) {
       apiClient.setToken(response.token);
     }

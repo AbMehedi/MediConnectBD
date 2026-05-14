@@ -1,0 +1,7 @@
+{
+  "watch": ["server.js", "routes", "middleware", "config", "utils"],
+  "ignore": ["node_modules", "*.log"],
+  "delay": "1000",
+  "restartable": "rs",
+  "verbose": false
+}

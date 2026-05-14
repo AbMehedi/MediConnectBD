@@ -20,15 +20,58 @@ export const PatientRegistration: React.FC<PatientRegistrationProps> = ({ onBack
   });
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate passwords match
+    if (formData.password !== formData.confirmPassword) {
+      alert('Passwords do not match');
+      return;
+    }
+
     setIsLoading(true);
 
-    // Simulate API Call
-    setTimeout(() => {
-        setIsLoading(false);
-        onRegisterSuccess(formData.email || formData.phone);
-    }, 1500);
+    try {
+      // Prepare registration data
+      const registrationData = {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        password: formData.password,
+        role: 'PATIENT',
+        // Convert age to dateOfBirth (approximate)
+        dateOfBirth: formData.age ? new Date(new Date().getFullYear() - parseInt(formData.age), 0, 1).toISOString().split('T')[0] : undefined
+      };
+
+      // Call backend registration API
+      const response = await fetch('http://localhost:5000/api/users/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(registrationData),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Store user data and token for future use
+        if (data.token) {
+          localStorage.setItem('mediconnect_token', data.token);
+          localStorage.setItem('mediconnect_user', JSON.stringify(data.user));
+        }
+        
+        alert(`Registration successful! Welcome ${data.user.name}`);
+        onRegisterSuccess(data.user.email || data.user.phone);
+      } else {
+        alert(data.message || 'Registration failed. Please try again.');
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      alert('Network error. Please check your connection and try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

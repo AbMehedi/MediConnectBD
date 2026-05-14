@@ -15,20 +15,43 @@ export const PatientLogin: React.FC<PatientLoginProps> = ({ onBack, onLoginSucce
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    // Simulate Network Delay and Auth
-    setTimeout(() => {
-      if (identifier && password.length >= 4) {
-         onLoginSuccess(identifier);
+    try {
+      // Call backend login API
+      const response = await fetch('http://localhost:5000/api/users/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: identifier, // Backend expects email field
+          password: password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Store user data and token
+        if (data.token) {
+          localStorage.setItem('mediconnect_token', data.token);
+          localStorage.setItem('mediconnect_user', JSON.stringify(data.user));
+        }
+        
+        onLoginSuccess(data.user.email || data.user.phone);
       } else {
-         setError('Invalid credentials. Please try again.');
-         setIsLoading(false);
+        setError(data.message || 'Login failed. Please check your credentials.');
       }
-    }, 1000);
+    } catch (error) {
+      console.error('Login error:', error);
+      setError('Network error. Please check your connection and try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

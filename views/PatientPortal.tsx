@@ -1,10 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { Search, MapPin, Video, Calendar, Clock, AlertCircle, ArrowLeft, Filter, CheckCircle, User, Star, Activity, ChevronRight, AlertTriangle, Settings, Bell, Lock, Globe, Save, Mail, Phone, Shield, LogOut, ChevronLeft, GraduationCap, Languages, Menu, FileText, Home } from 'lucide-react';
-import { MOCK_DOCTORS, MOCK_APPOINTMENTS, MOCK_VITALS } from '../constants';
 import { Doctor, Appointment, AppointmentStatus, User as UserType } from '../types';
 import { Button, Card, Badge, Modal } from '../components/UIComponents';
-import { aiAPI } from '../services/apiClient';
+import { aiAPI, authAPI, patientAPI, doctorAPI } from '../services/apiClient';
 import { MedicalHistory } from './MedicalHistory';
 
 interface PatientPortalProps {
@@ -27,8 +26,12 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
     }
   }, [initialMode]);
 
-  // Appointments State (initialized from Mock)
-  const [appointments, setAppointments] = useState<Appointment[]>(MOCK_APPOINTMENTS);
+  // Real Data State
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [patientProfile, setPatientProfile] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
@@ -62,10 +65,10 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
   const [activeSettingsTab, setActiveSettingsTab] = useState<'PROFILE' | 'SECURITY' | 'NOTIFICATIONS' | 'PRIVACY'>('PROFILE');
   
   const [settingsForm, setSettingsForm] = useState({
-      name: currentUser?.name || 'Rahim Uddin',
-      email: currentUser?.email || 'rahim@example.com',
-      phone: '01712345678',
-      bloodGroup: MOCK_VITALS.bloodGroup,
+      name: '',
+      email: '',
+      phone: '',
+      bloodGroup: '',
       notifications: {
           email: true,
           sms: true,
@@ -77,34 +80,107 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
       }
   });
 
-  // Update form if currentUser changes (e.g. login)
+  // Load real user data from localStorage or props
   useEffect(() => {
-      if (currentUser) {
-          setSettingsForm(prev => ({
-              ...prev,
-              name: currentUser.name,
-              email: currentUser.email
-          }));
-      }
+      const loadUserData = () => {
+          // Try to get user from localStorage first
+          const storedUser = localStorage.getItem('mediconnect_user');
+          let userData = currentUser;
+          
+          if (storedUser) {
+              try {
+                  userData = JSON.parse(storedUser);
+              } catch (error) {
+                  console.error('Error parsing stored user data:', error);
+              }
+          }
+          
+          if (userData) {
+              setSettingsForm(prev => ({
+                  ...prev,
+                  name: userData.name || '',
+                  email: userData.email || '',
+                  phone: userData.phone || '',
+                  bloodGroup: userData.bloodGroup || '' // Only show if user actually has it
+              }));
+          }
+      };
+      
+      loadUserData();
   }, [currentUser]);
 
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
-  // Filter Data Population
+  // Load real data from API
+  useEffect(() => {
+    loadInitialData();
+  }, []);
+
+  const loadInitialData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Load patient profile
+      try {
+        const profileResponse = await authAPI.getProfile();
+        if (profileResponse.success) {
+          setPatientProfile(profileResponse.user);
+          setSettingsForm(prev => ({
+            ...prev,
+            name: profileResponse.user.name || '',
+            email: profileResponse.user.email || '',
+            phone: profileResponse.user.phone || '',
+            bloodGroup: profileResponse.user.bloodGroup || ''
+          }));
+        }
+      } catch (error) {
+        console.log('Profile not available, using stored data');
+      }
+
+      // Load doctors
+      try {
+        const doctorsResponse = await doctorAPI.getAll();
+        if (doctorsResponse.success) {
+          setDoctors(doctorsResponse.data || []);
+        }
+      } catch (error) {
+        console.error('Error loading doctors:', error);
+      }
+
+      // Load patient appointments
+      try {
+        const appointmentsResponse = await patientAPI.getAppointments();
+        if (appointmentsResponse.success) {
+          setAppointments(appointmentsResponse.data || []);
+        }
+      } catch (error) {
+        console.error('Error loading appointments:', error);
+      }
+
+    } catch (error) {
+      console.error('Error loading initial data:', error);
+      setError('Failed to load data. Please refresh and try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Filter Data Population - use real doctors data
   const cities = ['All Cities', 'Dhaka', 'Chittagong', 'Sylhet'];
   const areas = ['All Areas', 'Dhanmondi', 'Gulshan', 'Banani', 'Uttara', 'Mirpur', 'Panthapath', 'Bakshibazar', 'Bashundhara R/A'];
-  const hospitals = ['All Hospitals', ...Array.from(new Set(MOCK_DOCTORS.map(d => d.hospital)))];
-  const specialties = ['All Specialties', ...Array.from(new Set(MOCK_DOCTORS.map(d => d.specialization)))];
+  const hospitals = ['All Hospitals', ...Array.from(new Set(doctors.map(d => d.hospital || 'Unknown Hospital')))];
+  const specialties = ['All Specialties', ...Array.from(new Set(doctors.map(d => d.specialization || 'General')))];
 
-  // Logic: Filtering Doctors
-  const filteredDoctors = MOCK_DOCTORS.filter(doc => {
+  // Logic: Filtering Doctors - use real doctors data
+  const filteredDoctors = doctors.filter(doc => {
     const matchesSearch = doc.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          doc.hospital.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCity = selectedCity === 'All Cities' || doc.location.includes(selectedCity);
-    const matchesArea = selectedArea === 'All Areas' || doc.location.includes(selectedArea);
+                          (doc.hospital || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCity = selectedCity === 'All Cities' || (doc.location || '').includes(selectedCity);
+    const matchesArea = selectedArea === 'All Areas' || (doc.location || '').includes(selectedArea);
     const matchesHospital = selectedHospital === 'All Hospitals' || doc.hospital === selectedHospital;
     const matchesSpec = selectedSpecialty === 'All Specialties' || doc.specialization === selectedSpecialty;
-    const matchesAi = aiRecommendation ? doc.specialization.includes(aiRecommendation.specialist) : true;
+    const matchesAi = aiRecommendation ? (doc.specialization || '').includes(aiRecommendation.specialist) : true;
     
     return matchesSearch && matchesCity && matchesArea && matchesHospital && matchesSpec && matchesAi;
   });
@@ -119,21 +195,35 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
       setIsBookingModalOpen(true);
   };
 
-  const handleConfirmBooking = () => {
-      const newApt: Appointment = {
-          id: `new-${Date.now()}`,
-          doctorName: bookingDoctor!.name,
-          patientName: settingsForm.name,
-          date: selectedDate,
-          time: selectedTime,
-          type: bookingType,
-          status: AppointmentStatus.CONFIRMED,
-          queueNumber: Math.floor(Math.random() * 20) + 10
+  const handleConfirmBooking = async () => {
+    try {
+      const appointmentData = {
+        patientId: patientProfile?.id || 10, // TODO: Get from auth context
+        doctorId: bookingDoctor!.id,
+        hospitalId: bookingDoctor!.hospitalId || 1, // TODO: Get from doctor data
+        appointmentDate: selectedDate,
+        appointmentTime: selectedTime,
+        type: bookingType === 'In-Person' ? 'Consultation' : 'Consultation',
+        symptoms: `Appointment booked via ${bookingType}`
       };
-      // Push to mock data so it persists when switching views
-      MOCK_APPOINTMENTS.push(newApt);
-      setAppointments(prev => [...prev, newApt]);
-      setBookingStep(3); 
+
+      const response = await patientAPI.bookAppointment(appointmentData);
+      
+      if (response.success) {
+        // Refresh appointments list
+        const appointmentsResponse = await patientAPI.getAppointments();
+        if (appointmentsResponse.success) {
+          setAppointments(appointmentsResponse.data || []);
+        }
+        
+        setBookingStep(3); // Show success step
+      } else {
+        alert('Failed to book appointment: ' + response.message);
+      }
+    } catch (error) {
+      console.error('Booking error:', error);
+      alert('Failed to book appointment. Please try again.');
+    }
   };
 
   const handleSymptomAnalysis = async () => {
@@ -167,26 +257,55 @@ export const PatientPortal: React.FC<PatientPortalProps> = ({ currentUser, onNav
       setIsCancelModalOpen(true);
   };
 
-  const confirmCancel = () => {
-      if (selectedAptIdCancel) {
-          const mockIndex = MOCK_APPOINTMENTS.findIndex(a => a.id === selectedAptIdCancel);
-          if (mockIndex >= 0) {
-              MOCK_APPOINTMENTS[mockIndex].status = AppointmentStatus.CANCELLED;
-          }
-          setAppointments(prev => prev.map(apt => 
+  const confirmCancel = async () => {
+    if (selectedAptIdCancel) {
+      try {
+        const response = await patientAPI.cancelAppointment(selectedAptIdCancel);
+        
+        if (response.success) {
+          // Refresh appointments list
+          const appointmentsResponse = await patientAPI.getAppointments();
+          if (appointmentsResponse.success) {
+            setAppointments(appointmentsResponse.data || []);
+          } else {
+            // Fallback to local state update if refresh fails
+            setAppointments(prev => prev.map(apt => 
               apt.id === selectedAptIdCancel ? { ...apt, status: AppointmentStatus.CANCELLED } : apt
-          ));
+            ));
+          }
+        } else {
+          alert('Failed to cancel appointment: ' + response.message);
+        }
+      } catch (error) {
+        console.error('Cancel appointment error:', error);
+        alert('Failed to cancel appointment. Please try again.');
       }
-      setIsCancelModalOpen(false);
-      setSelectedAptIdCancel(null);
+    }
+    setIsCancelModalOpen(false);
+    setSelectedAptIdCancel(null);
   };
 
-  const saveSettings = () => {
-      setIsSavingSettings(true);
-      setTimeout(() => {
-          setIsSavingSettings(false);
-          alert("Settings saved successfully!");
-      }, 1000);
+  const saveSettings = async () => {
+    setIsSavingSettings(true);
+    try {
+      const response = await patientAPI.updateProfile(settingsForm);
+      
+      if (response.success) {
+        alert("Settings saved successfully!");
+        // Update local patient profile
+        setPatientProfile(prevData => ({
+          ...prevData,
+          ...settingsForm
+        }));
+      } else {
+        alert('Failed to save settings: ' + response.message);
+      }
+    } catch (error) {
+      console.error('Settings save error:', error);
+      alert('Failed to save settings. Please try again.');
+    } finally {
+      setIsSavingSettings(false);
+    }
   };
 
   const getNext7Days = () => {
